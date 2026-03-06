@@ -25,7 +25,7 @@ docker run -d \
   -p 8485:8485 \
   -e SYNOLOGY_TANK_HOST=10.0.40.2 \
   -e SYNOLOGY_TANK_PORT=5001 \
-  -e SYNOLOGY_TANK_USERNAME=mcp-readonly \
+  -e SYNOLOGY_TANK_USERNAME=mcp-service \
   -e SYNOLOGY_TANK_PASSWORD=yourpassword \
   -e MCP_PORT=8485 \
   -e MCP_PERMISSION_TIER=health \
@@ -49,12 +49,12 @@ Each NAS is configured with a `SYNOLOGY_<NAME>_*` prefix. Add as many NAS units 
 ```
 SYNOLOGY_TANK_HOST=10.0.40.2
 SYNOLOGY_TANK_PORT=5001
-SYNOLOGY_TANK_USERNAME=mcp-readonly
+SYNOLOGY_TANK_USERNAME=mcp-service
 SYNOLOGY_TANK_PASSWORD=secret
 
 SYNOLOGY_DOZER_HOST=10.0.40.3
 SYNOLOGY_DOZER_PORT=5001
-SYNOLOGY_DOZER_USERNAME=mcp-readonly
+SYNOLOGY_DOZER_USERNAME=mcp-service
 SYNOLOGY_DOZER_PASSWORD=secret
 ```
 
@@ -109,10 +109,10 @@ Change the tier by setting `MCP_PERMISSION_TIER` and restarting.
 
 ## NAS Authentication
 
-Create a `mcp-readonly` local user on each Synology NAS:
+Create a `mcp-service` local user on each Synology NAS:
 
 1. DSM > Control Panel > User & Group > Create
-2. Username: `mcp-readonly`
+2. Username: `mcp-service`
 3. For health tier: may need admin group membership (DSM storage/SMART APIs often require admin)
 4. Restrict application permissions to deny everything except DSM
 
