@@ -267,7 +267,7 @@ def register_diagnostic_tools(mcp: FastMCP, client: SynologyClient) -> None:
                     "get",
                     version=2,
                 )
-                nfs_enabled = nfs_data.get("nfs_enable", False)
+                nfs_enabled = nfs_data.get("enable_nfs", False)
 
                 # Get per-share NFS privileges (requires admin)
                 shares = []
@@ -331,7 +331,7 @@ def register_diagnostic_tools(mcp: FastMCP, client: SynologyClient) -> None:
                     "SYNO.Core.FileServ.NFS", "get", version=2
                 )
                 services["nfs"] = {
-                    "enabled": nfs_data.get("nfs_enable", False),
+                    "enabled": nfs_data.get("enable_nfs", False),
                 }
             except Exception as e:
                 services["nfs"] = {"error": str(e)}
@@ -342,7 +342,7 @@ def register_diagnostic_tools(mcp: FastMCP, client: SynologyClient) -> None:
                     "SYNO.Core.FileServ.SMB", "get", version=3
                 )
                 services["smb"] = {
-                    "enabled": smb_data.get("enable_smb", smb_data.get("smb_enable", False)),
+                    "enabled": smb_data.get("enable_samba", False),
                 }
             except Exception as e:
                 services["smb"] = {"error": str(e)}

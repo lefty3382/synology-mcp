@@ -312,14 +312,12 @@ def register_health_tools(mcp: FastMCP, client: SynologyClient) -> None:
                         except Exception:
                             pass
 
-                        # NFS service running (requires admin — skip if unreliable)
+                        # NFS service running
                         try:
                             nfs_data = await conn.call(
                                 "SYNO.Core.FileServ.NFS", "get", version=2
                             )
-                            # Only alert if the API returns meaningful data
-                            # Non-admin users get empty/false responses
-                            if nfs_data.get("nfs_enable") is False and len(nfs_data) > 1:
+                            if not nfs_data.get("enable_nfs"):
                                 alerts.append("NFS service is disabled")
                         except Exception:
                             pass
