@@ -269,33 +269,41 @@ def register_diagnostic_tools(mcp: FastMCP, client: SynologyClient) -> None:
                 )
                 nfs_enabled = nfs_data.get("nfs_enable", False)
 
-                # Get per-share NFS privileges
-                priv_data = await conn.call(
-                    "SYNO.Core.FileServ.NFS.SharePrivilege",
-                    "list",
-                    version=1,
-                )
+                # Get per-share NFS privileges (requires admin)
                 shares = []
-                for share in priv_data.get("shares", []):
-                    rules = []
-                    for rule in share.get("rules", []):
-                        rules.append({
-                            "host": rule.get("host"),
-                            "privilege": rule.get("privilege"),
-                            "squash": rule.get("squash"),
-                            "security": rule.get("security"),
+                try:
+                    priv_data = await conn.call(
+                        "SYNO.Core.FileServ.NFS.SharePrivilege",
+                        "list",
+                        version=1,
+                    )
+                    for share in priv_data.get("shares", []):
+                        rules = []
+                        for rule in share.get("rules", []):
+                            rules.append({
+                                "host": rule.get("host"),
+                                "privilege": rule.get("privilege"),
+                                "squash": rule.get("squash"),
+                                "security": rule.get("security"),
+                            })
+                        shares.append({
+                            "name": share.get("name"),
+                            "path": share.get("path"),
+                            "rules": rules,
                         })
-                    shares.append({
-                        "name": share.get("name"),
-                        "path": share.get("path"),
-                        "rules": rules,
-                    })
+                except Exception:
+                    shares = None  # insufficient permissions
 
-                results[name] = {
+                result = {
                     "nfs_enabled": nfs_enabled,
-                    "share_count": len(shares),
-                    "shares": shares,
                 }
+                if shares is not None:
+                    result["share_count"] = len(shares)
+                    result["shares"] = shares
+                else:
+                    result["shares_error"] = "insufficient permissions for share privileges"
+
+                results[name] = result
             except Exception as e:
                 results[name] = {"error": str(e)}
         return results
