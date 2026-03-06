@@ -460,3 +460,141 @@ def register_diagnostic_tools(mcp: FastMCP, client: SynologyClient) -> None:
 
             results[name] = hw
         return results
+
+    @mcp.tool
+    async def get_recent_logs(
+        nas: str | None = None,
+        limit: int = 50,
+        severity: str | None = None,
+        keyword: str | None = None,
+    ) -> dict:
+        """Get recent DSM system log entries with optional filtering.
+
+        Retrieves syslog entries from the NAS. Supports filtering by severity
+        level and keyword search.
+
+        Args:
+            nas: NAS name (e.g., 'tank' or 'dozer'). If omitted, queries all.
+            limit: Maximum number of log entries to return (default 50).
+            severity: Filter by severity level: 'info', 'warn', or 'error'.
+            keyword: Filter logs containing this keyword string.
+        """
+        if not client.direct:
+            return {"error": "Direct API client not initialized"}
+
+        severity_map = {"info": 0, "warn": 1, "error": 2}
+
+        results = {}
+        for name, conn in client.direct.get_connections(nas).items():
+            try:
+                # Build params for primary API
+                params: dict = {"limit": limit, "offset": 0}
+                if severity and severity.lower() in severity_map:
+                    params["level"] = severity_map[severity.lower()]
+                if keyword:
+                    params["keyword"] = keyword
+
+                # Try primary API: SYNO.Core.SyslogClient.Status
+                data = None
+                try:
+                    data = await conn.call(
+                        "SYNO.Core.SyslogClient.Status",
+                        "list",
+                        version=1,
+                        extra_params=params,
+                    )
+                except Exception:
+                    pass
+
+                # Fallback if primary fails or returns empty
+                items = []
+                if data:
+                    items = data.get("items", data.get("logs", []))
+
+                if not items:
+                    try:
+                        fallback_data = await conn.call(
+                            "SYNO.Core.SyslogClient.Log",
+                            "get",
+                            version=1,
+                            extra_params=params,
+                        )
+                        items = fallback_data.get("items", fallback_data.get("logs", []))
+                    except Exception:
+                        pass
+
+                logs = []
+                for entry in items:
+                    logs.append({
+                        "timestamp": entry.get("time", entry.get("timestamp")),
+                        "severity": entry.get("level_str", entry.get("level")),
+                        "user": entry.get("who", entry.get("user")),
+                        "event": entry.get("descr", entry.get("desc", entry.get("msg"))),
+                        "ip": entry.get("ip"),
+                    })
+
+                results[name] = {
+                    "total": data.get("total", len(logs)) if data else len(logs),
+                    "logs": logs,
+                }
+            except Exception as e:
+                results[name] = {"error": str(e)}
+        return results
+
+    @mcp.tool
+    async def get_notifications(nas: str | None = None) -> dict:
+        """Get notification configuration and recent warning/error alerts.
+
+        Returns push/mail notification settings and recent high-severity
+        log entries (warnings and errors).
+
+        Args:
+            nas: NAS name (e.g., 'tank' or 'dozer'). If omitted, queries all.
+        """
+        if not client.direct:
+            return {"error": "Direct API client not initialized"}
+
+        results = {}
+        for name, conn in client.direct.get_connections(nas).items():
+            try:
+                # Get notification configuration
+                notification_config = {}
+                try:
+                    notif_data = await conn.call(
+                        "SYNO.Core.Notification.Push.Mail",
+                        "get",
+                        version=1,
+                    )
+                    notification_config = {
+                        "push_enabled": notif_data.get("push_enabled", notif_data.get("enable_push", False)),
+                        "mail_enabled": notif_data.get("mail_enabled", notif_data.get("enable_mail", False)),
+                    }
+                except Exception as e:
+                    notification_config = {"error": str(e)}
+
+                # Get recent warning+ logs (level=1 means warn and above)
+                recent_alerts = []
+                try:
+                    log_data = await conn.call(
+                        "SYNO.Core.SyslogClient.Status",
+                        "list",
+                        version=1,
+                        extra_params={"limit": 50, "offset": 0, "level": 1},
+                    )
+                    items = log_data.get("items", log_data.get("logs", []))
+                    for entry in items:
+                        recent_alerts.append({
+                            "timestamp": entry.get("time", entry.get("timestamp")),
+                            "severity": entry.get("level_str", entry.get("level")),
+                            "event": entry.get("descr", entry.get("desc", entry.get("msg"))),
+                        })
+                except Exception:
+                    pass
+
+                results[name] = {
+                    "notification_config": notification_config,
+                    "recent_alerts": recent_alerts,
+                }
+            except Exception as e:
+                results[name] = {"error": str(e)}
+        return results
