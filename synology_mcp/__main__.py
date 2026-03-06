@@ -17,6 +17,7 @@ async def main() -> None:
             transport="streamable-http",
             host="0.0.0.0",
             port=config.port,
+            stateless_http=True,
         )
     finally:
         await client.disconnect()
