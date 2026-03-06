@@ -274,6 +274,54 @@ def register_health_tools(mcp: FastMCP, client: SynologyClient) -> None:
                 if sys_temp and warn_temp and sys_temp >= warn_temp:
                     alerts.append(f"System temperature {sys_temp}C exceeds warning threshold")
 
+                # Enhanced checks via direct API (if available)
+                if client.direct:
+                    conn_map = client.direct.get_connections(name)
+                    conn = conn_map.get(name)
+                    if conn:
+                        # SSD cache health
+                        try:
+                            storage_data = await conn.call(
+                                "SYNO.Storage.CGI.Storage",
+                                "load_info",
+                                version=1,
+                                cache_key="storage_load_info",
+                            )
+                            for d in storage_data.get("disks", []):
+                                if d.get("isSsd") and d.get("allocation_role", "").startswith("shared_cache"):
+                                    if d.get("status") != "normal" or d.get("tray_status") == "not join":
+                                        alerts.append(
+                                            f"SSD Cache {d.get('name')}: status={d.get('status')}, "
+                                            f"tray={d.get('tray_status')}"
+                                        )
+                        except Exception:
+                            pass
+
+                        # UPS status
+                        try:
+                            ups_data = await conn.call(
+                                "SYNO.Core.ExternalDevice.UPS", "get", version=1
+                            )
+                            if ups_data.get("enable_ups"):
+                                status = ups_data.get("ups_status", "")
+                                charge = ups_data.get("ups_battery_charge")
+                                if status and "ol" not in status.lower():
+                                    alerts.append(f"UPS: status is {status}")
+                                if charge is not None and int(charge) < 50:
+                                    alerts.append(f"UPS: battery at {charge}%")
+                        except Exception:
+                            pass
+
+                        # NFS service running
+                        try:
+                            nfs_data = await conn.call(
+                                "SYNO.Core.FileServ.NFS", "get", version=2
+                            )
+                            if not nfs_data.get("nfs_enable"):
+                                alerts.append("NFS service is disabled")
+                        except Exception:
+                            pass
+
                 results[name] = {
                     "model": api.information.model,
                     "version": api.information.version_string,
