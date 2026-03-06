@@ -501,7 +501,7 @@ def register_diagnostic_tools(mcp: FastMCP, client: SynologyClient) -> None:
                         "SYNO.Core.SyslogClient.Status",
                         "list",
                         version=1,
-                        extra_params=params,
+                        **params,
                     )
                 except Exception:
                     pass
@@ -517,7 +517,7 @@ def register_diagnostic_tools(mcp: FastMCP, client: SynologyClient) -> None:
                             "SYNO.Core.SyslogClient.Log",
                             "get",
                             version=1,
-                            extra_params=params,
+                            **params,
                         )
                         items = fallback_data.get("items", fallback_data.get("logs", []))
                     except Exception:
@@ -579,7 +579,9 @@ def register_diagnostic_tools(mcp: FastMCP, client: SynologyClient) -> None:
                         "SYNO.Core.SyslogClient.Status",
                         "list",
                         version=1,
-                        extra_params={"limit": 50, "offset": 0, "level": 1},
+                        limit=50,
+                        offset=0,
+                        level=1,
                     )
                     items = log_data.get("items", log_data.get("logs", []))
                     for entry in items:
@@ -619,7 +621,8 @@ def register_diagnostic_tools(mcp: FastMCP, client: SynologyClient) -> None:
                     "SYNO.Core.CurrentConnection",
                     "list",
                     version=1,
-                    extra_params={"limit": 200, "offset": 0},
+                    limit=200,
+                    offset=0,
                 )
                 connections = []
                 for item in data.get("items", []):
@@ -659,7 +662,9 @@ def register_diagnostic_tools(mcp: FastMCP, client: SynologyClient) -> None:
                     "SYNO.Core.User",
                     "list",
                     version=1,
-                    extra_params={"offset": 0, "limit": 200, "type": "local"},
+                    offset=0,
+                    limit=200,
+                    type="local",
                 )
                 users = []
                 for user in data.get("users", []):
