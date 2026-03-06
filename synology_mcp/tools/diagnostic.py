@@ -681,3 +681,35 @@ def register_diagnostic_tools(mcp: FastMCP, client: SynologyClient) -> None:
             except Exception as e:
                 results[name] = {"error": str(e)}
         return results
+
+    @mcp.tool
+    async def get_update_status(nas: str | None = None) -> dict:
+        """Check for available DSM firmware updates.
+
+        Reports current firmware version, whether an update is available,
+        the update version, reboot requirements, and release notes URL.
+
+        Args:
+            nas: NAS name (e.g., 'tank' or 'dozer'). If omitted, queries all.
+        """
+        if not client.direct:
+            return {"error": "Direct API client not initialized"}
+
+        results = {}
+        for name, conn in client.direct.get_connections(nas).items():
+            try:
+                data = await conn.call(
+                    "SYNO.Core.Upgrade.Server",
+                    "check",
+                    version=1,
+                )
+                results[name] = {
+                    "current_version": data.get("firmware_version"),
+                    "update_available": data.get("available", False),
+                    "update_version": data.get("version"),
+                    "reboot_needed": data.get("reboot_needed", data.get("reboot")),
+                    "release_notes": data.get("release_notes_url"),
+                }
+            except Exception as e:
+                results[name] = {"error": str(e)}
+        return results
