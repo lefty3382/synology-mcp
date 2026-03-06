@@ -4,6 +4,7 @@ import aiohttp
 from synology_dsm import SynologyDSM
 
 from .config import NasConfig
+from .direct_client import DirectApiClient
 
 
 class SynologyClient:
@@ -13,6 +14,7 @@ class SynologyClient:
         self._clients: dict[str, SynologyDSM] = {}
         self._configs: dict[str, NasConfig] = {}
         self._session: aiohttp.ClientSession | None = None
+        self.direct: DirectApiClient | None = None
 
     async def connect(self, configs: list[NasConfig]) -> None:
         """Initialize connections to all configured NAS units."""
@@ -35,6 +37,15 @@ class SynologyClient:
                 print(f"Connected to {config.name} ({config.host})")
             except Exception as e:
                 print(f"Failed to connect to {config.name} ({config.host}): {e}")
+
+        # Direct API client for raw SYNO.* endpoints
+        self.direct = DirectApiClient(self._session)
+        for config in configs:
+            try:
+                await self.direct.connect(config)
+                print(f"Direct API connected to {config.name} ({config.host})")
+            except Exception as e:
+                print(f"Direct API failed for {config.name} ({config.host}): {e}")
 
     async def disconnect(self) -> None:
         """Close all connections."""
