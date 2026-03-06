@@ -244,3 +244,134 @@ def register_diagnostic_tools(mcp: FastMCP, client: SynologyClient) -> None:
             except Exception as e:
                 results[name] = {"error": str(e)}
         return results
+
+    @mcp.tool
+    async def get_nfs_exports(nas: str | None = None) -> dict:
+        """Get NFS service status and per-share export rules.
+
+        Checks whether NFS is enabled, then lists share-level export
+        rules including host, privilege, squash, and security settings.
+
+        Args:
+            nas: NAS name (e.g., 'tank' or 'dozer'). If omitted, queries all.
+        """
+        if not client.direct:
+            return {"error": "Direct API client not initialized"}
+
+        results = {}
+        for name, conn in client.direct.get_connections(nas).items():
+            try:
+                # Get NFS service status
+                nfs_data = await conn.call(
+                    "SYNO.Core.FileServ.NFS",
+                    "get",
+                    version=2,
+                )
+                nfs_enabled = nfs_data.get("nfs_enable", False)
+
+                # Get per-share NFS privileges
+                priv_data = await conn.call(
+                    "SYNO.Core.FileServ.NFS.SharePrivilege",
+                    "list",
+                    version=1,
+                )
+                shares = []
+                for share in priv_data.get("shares", []):
+                    rules = []
+                    for rule in share.get("rules", []):
+                        rules.append({
+                            "host": rule.get("host"),
+                            "privilege": rule.get("privilege"),
+                            "squash": rule.get("squash"),
+                            "security": rule.get("security"),
+                        })
+                    shares.append({
+                        "name": share.get("name"),
+                        "path": share.get("path"),
+                        "rules": rules,
+                    })
+
+                results[name] = {
+                    "nfs_enabled": nfs_enabled,
+                    "share_count": len(shares),
+                    "shares": shares,
+                }
+            except Exception as e:
+                results[name] = {"error": str(e)}
+        return results
+
+    @mcp.tool
+    async def get_services_status(nas: str | None = None) -> dict:
+        """Get enabled/disabled status for key DSM services.
+
+        Checks NFS, SMB, SSH, rsync, and SNMP service status individually.
+        One service failing does not prevent others from being reported.
+
+        Args:
+            nas: NAS name (e.g., 'tank' or 'dozer'). If omitted, queries all.
+        """
+        if not client.direct:
+            return {"error": "Direct API client not initialized"}
+
+        results = {}
+        for name, conn in client.direct.get_connections(nas).items():
+            services: dict = {}
+
+            # NFS
+            try:
+                nfs_data = await conn.call(
+                    "SYNO.Core.FileServ.NFS", "get", version=2
+                )
+                services["nfs"] = {
+                    "enabled": nfs_data.get("nfs_enable", False),
+                }
+            except Exception as e:
+                services["nfs"] = {"error": str(e)}
+
+            # SMB
+            try:
+                smb_data = await conn.call(
+                    "SYNO.Core.FileServ.SMB", "get", version=3
+                )
+                services["smb"] = {
+                    "enabled": smb_data.get("enable_smb", smb_data.get("smb_enable", False)),
+                }
+            except Exception as e:
+                services["smb"] = {"error": str(e)}
+
+            # SSH
+            try:
+                ssh_data = await conn.call(
+                    "SYNO.Core.Terminal", "get", version=3
+                )
+                services["ssh"] = {
+                    "enabled": ssh_data.get("enable_ssh", False),
+                    "port": ssh_data.get("ssh_port"),
+                }
+            except Exception as e:
+                services["ssh"] = {"error": str(e)}
+
+            # rsync
+            try:
+                rsync_data = await conn.call(
+                    "SYNO.Core.FileServ.Rsync", "get", version=2
+                )
+                services["rsync"] = {
+                    "enabled": rsync_data.get("enable_rsync", rsync_data.get("rsync_enable", False)),
+                }
+            except Exception as e:
+                services["rsync"] = {"error": str(e)}
+
+            # SNMP
+            try:
+                snmp_data = await conn.call(
+                    "SYNO.Core.SNMP", "get", version=1
+                )
+                services["snmp"] = {
+                    "enabled": snmp_data.get("snmp_enable", snmp_data.get("enable_snmp", False)),
+                }
+            except Exception as e:
+                services["snmp"] = {"error": str(e)}
+
+            results[name] = {"services": services}
+        return results
