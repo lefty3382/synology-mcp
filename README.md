@@ -1,15 +1,27 @@
 # Synology MCP Server
 
-A [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server for Synology NAS devices. Provides real-time, read-only access to NAS health, storage, and system information via Streamable HTTP transport.
+A [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server for Synology NAS devices. Provides real-time, read-only access to NAS health, storage, and system information via Streamable HTTP transport — **23 tools** across three permission tiers.
 
-Built with [FastMCP](https://gofastmcp.com/) and [py-synologydsm-api](https://github.com/mib1185/py-synologydsm-api).
+Built with [FastMCP](https://gofastmcp.com/), [py-synologydsm-api](https://github.com/mib1185/py-synologydsm-api), and a custom `DirectApiClient` for raw SYNO.* API access.
 
 ## Features
 
 - **Multi-NAS support** — monitor multiple Synology NAS units from a single server
+- **23 tools** — 10 core health tools + 13 direct API diagnostic tools
+- **Hybrid backend** — py-synologydsm-api for stable health metrics, direct HTTP client for advanced diagnostics
 - **Three permission tiers** — health (default), read, write — controlled by one env var
 - **Native Streamable HTTP** — no proxy needed, connects directly from Claude Code
 - **Single Docker container** — Python slim base, minimal dependencies
+
+## Architecture
+
+The server uses a **hybrid backend** combining two API clients:
+
+1. **py-synologydsm-api** — mature, well-tested library for core Synology DSM data (system info, storage, utilization, shares, network). Powers the 10 original health tools.
+
+2. **DirectApiClient** — lightweight HTTP client that authenticates directly against the DSM web API and calls raw `SYNO.*` endpoints. Provides access to APIs not covered by py-synologydsm-api: SSD cache, UPS, NFS exports, services, hardware sensors, logs, user accounts, and more. Includes 30-second response caching and automatic session renewal.
+
+Both clients connect at startup. If the direct client fails to initialize, the core health tools continue to work — direct API tools return a clear error message instead. The `get_health_summary` tool uses both backends: py-synologydsm-api for base metrics and DirectApiClient for enhanced SSD cache, UPS, and NFS alerts (with graceful fallback if unavailable).
 
 ## Quick Start
 
@@ -69,7 +81,7 @@ SYNOLOGY_DOZER_PASSWORD=secret
 
 | Tier | Tools | Use Case |
 |------|-------|----------|
-| `health` (default) | System info, volumes, disks, SMART, shares, network, utilization | Infrastructure monitoring |
+| `health` (default) | 23 tools — core health + direct API diagnostics | Infrastructure monitoring |
 | `read` | Health + file listing, file info, shared folders | Browse NAS contents |
 | `write` | Health + read + upload, delete | Full file management |
 
@@ -77,7 +89,7 @@ Change the tier by setting `MCP_PERMISSION_TIER` and restarting.
 
 ## Tools
 
-### Health Tier (always available)
+### Health Tier — Core Tools (always available)
 
 | Tool | Description |
 |------|-------------|
@@ -90,7 +102,54 @@ Change the tier by setting `MCP_PERMISSION_TIER` and restarting.
 | `get_storage_pools` | Storage pool config, RAID type |
 | `get_shares` | Shared folder listing |
 | `get_network` | Network interfaces, DNS, gateway |
-| `get_health_summary` | Aggregated health with alerts |
+| `get_health_summary` | Aggregated health with SSD cache, UPS, and NFS alerts |
+
+### Health Tier — Direct API Tools (always available)
+
+These tools use the `DirectApiClient` to query raw SYNO.* endpoints for data not available through py-synologydsm-api.
+
+#### Storage Diagnostics
+
+| Tool | Description |
+|------|-------------|
+| `get_disk_details` | Full disk hardware info — model, serial, vendor, firmware, allocation role, tray status |
+| `get_ssd_cache` | SSD cache pool status and per-disk health |
+| `get_storage_pool_members` | Per-pool disk membership with RAID type and scrub/rebuild status |
+
+#### Services & Config
+
+| Tool | Description |
+|------|-------------|
+| `get_nfs_exports` | NFS shared folders with allowed hosts and permissions |
+| `get_services_status` | Running state of NFS, SMB, SSH, rsync, SNMP |
+
+#### Hardware & Power
+
+| Tool | Description |
+|------|-------------|
+| `get_ups_status` | UPS model, battery charge, runtime, NUT config |
+| `get_hardware_info` | Fan speeds, power recovery, beep control |
+
+#### Logs & Notifications
+
+| Tool | Description |
+|------|-------------|
+| `get_recent_logs` | System logs with severity/keyword filtering |
+| `get_notifications` | DSM notification config and alert history |
+
+#### Access & Users
+
+| Tool | Description |
+|------|-------------|
+| `get_active_connections` | Connected SMB/NFS/FTP clients |
+| `get_users` | Local user accounts and group membership |
+
+#### Maintenance & Discovery
+
+| Tool | Description |
+|------|-------------|
+| `get_update_status` | Available DSM updates and current version |
+| `discover_apis` | List all available SYNO.* API endpoints on a NAS |
 
 ### Read Tier
 
@@ -131,12 +190,6 @@ cp .env.example .env
 # Run locally
 python -m synology_mcp
 ```
-
-## Planned Additions
-
-- `get_nfs_shares` — NFS export list with permissions (requires direct DSM API calls)
-- `get_ups_status` — UPS status via NUT (requires direct DSM API calls)
-- File search, create directory, rename, move (not yet supported by py-synologydsm-api)
 
 ## License
 

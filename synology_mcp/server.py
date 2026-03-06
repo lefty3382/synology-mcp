@@ -5,6 +5,7 @@ from fastmcp import FastMCP
 from .config import AppConfig
 from .client import SynologyClient
 from .tools.health import register_health_tools
+from .tools.diagnostic import register_diagnostic_tools
 from .tools.files_read import register_read_tools
 from .tools.files_write import register_write_tools
 
@@ -21,6 +22,7 @@ def create_server(config: AppConfig, client: SynologyClient) -> FastMCP:
 
     # Health tier — always registered
     register_health_tools(mcp, client)
+    register_diagnostic_tools(mcp, client)
 
     # Read tier — file browsing
     if config.permission_tier in ("read", "write"):
