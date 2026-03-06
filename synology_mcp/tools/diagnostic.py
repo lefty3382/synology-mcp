@@ -598,3 +598,86 @@ def register_diagnostic_tools(mcp: FastMCP, client: SynologyClient) -> None:
             except Exception as e:
                 results[name] = {"error": str(e)}
         return results
+
+    @mcp.tool
+    async def get_active_connections(nas: str | None = None) -> dict:
+        """Get active login sessions and connections to the NAS.
+
+        Lists all current connections including connection type, source IP,
+        user, login time, and description.
+
+        Args:
+            nas: NAS name (e.g., 'tank' or 'dozer'). If omitted, queries all.
+        """
+        if not client.direct:
+            return {"error": "Direct API client not initialized"}
+
+        results = {}
+        for name, conn in client.direct.get_connections(nas).items():
+            try:
+                data = await conn.call(
+                    "SYNO.Core.CurrentConnection",
+                    "list",
+                    version=1,
+                    extra_params={"limit": 200, "offset": 0},
+                )
+                connections = []
+                for item in data.get("items", []):
+                    connections.append({
+                        "type": item.get("type"),
+                        "ip": item.get("ip"),
+                        "who": item.get("who"),
+                        "time": item.get("time"),
+                        "descr": item.get("descr"),
+                    })
+
+                results[name] = {
+                    "total": data.get("total", len(connections)),
+                    "connections": connections,
+                }
+            except Exception as e:
+                results[name] = {"error": str(e)}
+        return results
+
+    @mcp.tool
+    async def get_users(nas: str | None = None) -> dict:
+        """Get local user accounts on the NAS.
+
+        Lists all local DSM user accounts with name, UID, description,
+        email, expiry status, and whether they are administrators.
+
+        Args:
+            nas: NAS name (e.g., 'tank' or 'dozer'). If omitted, queries all.
+        """
+        if not client.direct:
+            return {"error": "Direct API client not initialized"}
+
+        results = {}
+        for name, conn in client.direct.get_connections(nas).items():
+            try:
+                data = await conn.call(
+                    "SYNO.Core.User",
+                    "list",
+                    version=1,
+                    extra_params={"offset": 0, "limit": 200, "type": "local"},
+                )
+                users = []
+                for user in data.get("users", []):
+                    groups = user.get("groups", [])
+                    is_admin = "administrators" in groups
+                    users.append({
+                        "name": user.get("name"),
+                        "uid": user.get("uid"),
+                        "description": user.get("description"),
+                        "email": user.get("email"),
+                        "expired": user.get("expired"),
+                        "admin": is_admin,
+                    })
+
+                results[name] = {
+                    "total": data.get("total", len(users)),
+                    "users": users,
+                }
+            except Exception as e:
+                results[name] = {"error": str(e)}
+        return results
