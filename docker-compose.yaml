@@ -1,0 +1,10 @@
+# For local development/testing only.
+# Production deployment uses the homelab repo's VM 102 docker-compose.
+services:
+  synology-mcp:
+    build: .
+    container_name: synology-mcp
+    restart: unless-stopped
+    ports:
+      - "${MCP_PORT:-8485}:${MCP_PORT:-8485}"
+    env_file: ./.env
