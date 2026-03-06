@@ -2,6 +2,28 @@
 
 All notable changes to the Synology MCP Server are documented in this file.
 
+## [2.0.0] - 2026-03-06
+
+### Added
+- `DirectApiClient` — lightweight HTTP client for raw SYNO.* API calls with session management and 30s response caching
+- `discover_apis` — list all available API endpoints on a NAS
+- `get_disk_details` — full disk hardware info (model, serial, vendor, firmware, role, tray status)
+- `get_ssd_cache` — SSD cache pool status and member disk health
+- `get_storage_pool_members` — per-pool disk membership with RAID details
+- `get_nfs_exports` — NFS shared folders with allowed hosts and permissions
+- `get_services_status` — running state of NFS, SMB, SSH, rsync, SNMP
+- `get_ups_status` — UPS model, battery charge, runtime, NUT config
+- `get_hardware_info` — fan speeds, power recovery, beep control
+- `get_recent_logs` — system logs with severity/keyword filtering
+- `get_notifications` — DSM notification config and alert history
+- `get_active_connections` — connected SMB/NFS/FTP clients
+- `get_users` — local user accounts and group membership
+- `get_update_status` — available DSM updates and current version
+
+### Changed
+- `get_health_summary` — enhanced with SSD cache, UPS, and NFS service alerts via direct API
+- Tool count: 10 → 23 (health tier)
+
 ## [1.0.1] - 2026-03-05
 
 ### Fixed
