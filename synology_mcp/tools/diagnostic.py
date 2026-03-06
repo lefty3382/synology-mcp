@@ -375,3 +375,88 @@ def register_diagnostic_tools(mcp: FastMCP, client: SynologyClient) -> None:
 
             results[name] = {"services": services}
         return results
+
+    @mcp.tool
+    async def get_ups_status(nas: str | None = None) -> dict:
+        """Get UPS (Uninterruptible Power Supply) status and configuration.
+
+        Reports UPS mode, model, battery charge, estimated runtime,
+        and shutdown settings from SYNO.Core.ExternalDevice.UPS.
+
+        Args:
+            nas: NAS name (e.g., 'tank' or 'dozer'). If omitted, queries all.
+        """
+        if not client.direct:
+            return {"error": "Direct API client not initialized"}
+
+        results = {}
+        for name, conn in client.direct.get_connections(nas).items():
+            try:
+                data = await conn.call(
+                    "SYNO.Core.ExternalDevice.UPS",
+                    "get",
+                    version=1,
+                )
+                results[name] = {
+                    "enable_ups": data.get("enable_ups", False),
+                    "ups_mode": data.get("ups_mode"),
+                    "model": data.get("ups_model"),
+                    "status": data.get("ups_status"),
+                    "battery_charge": data.get("ups_battery_charge"),
+                    "battery_runtime_seconds": data.get("ups_battery_runtime"),
+                    "server_ip": data.get("ups_server_ip"),
+                    "shutdown_mode": data.get("shutdown_mode"),
+                    "safe_shutdown_time": data.get("safe_shutdown_time"),
+                }
+            except Exception as e:
+                results[name] = {"error": str(e)}
+        return results
+
+    @mcp.tool
+    async def get_hardware_info(nas: str | None = None) -> dict:
+        """Get hardware details: fan speeds, power schedule, and beep control.
+
+        Queries multiple SYNO.Core.Hardware.* APIs individually so one
+        failure does not prevent others from being reported.
+
+        Args:
+            nas: NAS name (e.g., 'tank' or 'dozer'). If omitted, queries all.
+        """
+        if not client.direct:
+            return {"error": "Direct API client not initialized"}
+
+        results = {}
+        for name, conn in client.direct.get_connections(nas).items():
+            hw: dict = {}
+
+            # Fan speed
+            try:
+                fan_data = await conn.call(
+                    "SYNO.Core.Hardware.FanSpeed", "get", version=1
+                )
+                hw["fan_speed_mode"] = fan_data.get("fan_speed_mode")
+                hw["fans"] = fan_data.get("fans", [])
+            except Exception as e:
+                hw["fan_error"] = str(e)
+
+            # Power schedule
+            try:
+                power_data = await conn.call(
+                    "SYNO.Core.Hardware.PowerSchedule", "load", version=1
+                )
+                hw["power_recovery"] = power_data.get("power_recovery")
+                hw["schedule"] = power_data.get("schedule", [])
+            except Exception as e:
+                hw["power_schedule_error"] = str(e)
+
+            # Beep control
+            try:
+                beep_data = await conn.call(
+                    "SYNO.Core.Hardware.BeepControl", "get", version=1
+                )
+                hw["beep_enabled"] = beep_data.get("beep_enabled", beep_data.get("enable_beep"))
+            except Exception as e:
+                hw["beep_error"] = str(e)
+
+            results[name] = hw
+        return results
