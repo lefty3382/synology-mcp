@@ -234,3 +234,66 @@ def register_write_tools(mcp: FastMCP, client: SynologyClient) -> None:
             return resp
         except Exception as e:
             return {nas_name: {"error": str(e)}}
+
+    @mcp.tool
+    async def delete(
+        nas: str,
+        path: str | list[str],
+        confirm: bool = False,
+        recursive: bool = False,
+    ) -> dict:
+        """Delete files or folders from the NAS. Requires explicit confirmation.
+
+        Args:
+            nas: NAS name (e.g., 'tank' or 'dozer').
+            path: Path or list of paths to delete.
+            confirm: MUST be True to execute. Safety check to prevent accidental deletion.
+            recursive: Required for deleting non-empty directories (default: False).
+        """
+        if not confirm:
+            return {
+                "error": "Safety check: confirm must be True to delete files. "
+                "Set confirm=True to proceed with deletion."
+            }
+
+        if not client.direct:
+            return {"error": "Direct API client not initialized"}
+
+        conn = client.direct.get_connections(nas)
+        if not conn:
+            return {"error": f"NAS '{nas}' not found or not connected"}
+
+        nas_name = nas.lower()
+        c = conn[nas_name]
+
+        if isinstance(path, list):
+            target = ",".join(path)
+        else:
+            target = path
+
+        try:
+            start_data = await c.call(
+                "SYNO.FileStation.Delete",
+                "start",
+                version=2,
+                path=target,
+                recursive=str(recursive).lower(),
+            )
+            task_id = start_data.get("taskid")
+            if not task_id:
+                return {nas_name: {"error": "Failed to start delete task"}}
+
+            result = await c.poll_task(
+                "SYNO.FileStation.Delete", task_id, timeout=120
+            )
+
+            return {
+                nas_name: {
+                    "success": not result.get("timeout", False),
+                    "deleted": path,
+                    "recursive": recursive,
+                    "finished": not result.get("timeout", False),
+                }
+            }
+        except Exception as e:
+            return {nas_name: {"error": str(e)}}
