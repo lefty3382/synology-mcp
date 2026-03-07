@@ -12,24 +12,38 @@ from .tools.files_write import register_write_tools
 
 def create_server(config: AppConfig, client: SynologyClient) -> FastMCP:
     """Create and configure the FastMCP server with tools based on permission tier."""
-    mcp = FastMCP(
-        "Synology MCP Server",
-        instructions=(
+    tier = config.permission_tier
+
+    if tier == "write":
+        desc = (
+            "Provides full access to Synology NAS: health monitoring, "
+            "storage diagnostics, file browsing, and file management. "
+            "Query one or all configured NAS units."
+        )
+    elif tier == "read":
+        desc = (
+            "Provides read access to Synology NAS: health monitoring, "
+            "storage diagnostics, and file browsing. "
+            "Query one or all configured NAS units."
+        )
+    else:
+        desc = (
             "Provides read-only access to Synology NAS health, storage, "
             "and system information. Query one or all configured NAS units."
-        ),
-    )
+        )
+
+    mcp = FastMCP("Synology MCP Server", instructions=desc)
 
     # Health tier — always registered
     register_health_tools(mcp, client)
     register_diagnostic_tools(mcp, client)
 
     # Read tier — file browsing
-    if config.permission_tier in ("read", "write"):
+    if tier in ("read", "write"):
         register_read_tools(mcp, client)
 
     # Write tier — file mutations
-    if config.permission_tier == "write":
+    if tier == "write":
         register_write_tools(mcp, client)
 
     return mcp
