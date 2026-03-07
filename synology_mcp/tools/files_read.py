@@ -152,3 +152,142 @@ def register_read_tools(mcp: FastMCP, client: SynologyClient) -> None:
             }
         except Exception as e:
             return {name: {"error": str(e)}}
+
+    @mcp.tool
+    async def list_shared_folders(nas: str | None = None) -> dict:
+        """List top-level shared folders on the NAS.
+
+        Args:
+            nas: NAS name (e.g., 'tank' or 'dozer'). If omitted, queries all.
+        """
+        if not client.direct:
+            return {"error": "Direct API client not initialized"}
+
+        results = {}
+        for name, c in client.direct.get_connections(nas).items():
+            try:
+                data = await c.call(
+                    "SYNO.FileStation.List",
+                    "list_share",
+                    version=2,
+                    additional='["volume_status","time","perm"]',
+                )
+                shares = []
+                for s in data.get("shares", []):
+                    additional = s.get("additional", {})
+                    vol = additional.get("volume_status", {})
+                    shares.append({
+                        "name": s.get("name"),
+                        "path": s.get("path"),
+                        "is_dir": s.get("isdir", True),
+                        "total_size": vol.get("totalspace"),
+                        "free_size": vol.get("freespace"),
+                    })
+                results[name] = {"shared_folders": shares}
+            except Exception as e:
+                results[name] = {"error": str(e)}
+        return results
+
+    @mcp.tool
+    async def search_files(
+        nas: str,
+        path: str,
+        pattern: str,
+        extension: str | None = None,
+        recursive: bool = True,
+        limit: int = 1000,
+    ) -> dict:
+        """Search for files by name pattern within a directory.
+
+        Starts an async search task, polls until complete, returns results.
+        May take several seconds for large directory trees.
+
+        Args:
+            nas: NAS name (e.g., 'tank' or 'dozer').
+            path: Root directory to search from.
+            pattern: Filename pattern to search for (e.g., '*.nfo', '*missing*').
+            extension: Filter by file extension without dot (e.g., 'nfo', 'mkv'). Optional.
+            recursive: Search subdirectories (default: True).
+            limit: Max results to return (default: 1000).
+        """
+        if not client.direct:
+            return {"error": "Direct API client not initialized"}
+
+        conn = client.direct.get_connections(nas)
+        if not conn:
+            return {"error": f"NAS '{nas}' not found or not connected"}
+
+        name = nas.lower()
+        c = conn[name]
+
+        try:
+            # Start search task
+            start_params = {
+                "folder_path": path,
+                "pattern": pattern,
+                "recursive": str(recursive).lower(),
+            }
+            if extension:
+                start_params["extension"] = extension
+
+            start_data = await c.call(
+                "SYNO.FileStation.Search", "start", version=2, **start_params
+            )
+            task_id = start_data.get("taskid")
+            if not task_id:
+                return {name: {"error": "Failed to start search task"}}
+
+            # Poll until finished
+            import asyncio as _asyncio
+            import time as _time
+
+            poll_start = _time.monotonic()
+            timeout = 120  # 2 min timeout for searches
+            files = []
+            finished = False
+
+            while (_time.monotonic() - poll_start) < timeout:
+                list_data = await c.call(
+                    "SYNO.FileStation.Search",
+                    "list",
+                    version=2,
+                    taskid=task_id,
+                    offset=0,
+                    limit=limit,
+                    additional='["size","time","type"]',
+                )
+                finished = list_data.get("finished", False)
+                if finished:
+                    for f in list_data.get("files", []):
+                        additional = f.get("additional", {})
+                        time_info = additional.get("time", {})
+                        files.append({
+                            "name": f.get("name"),
+                            "path": f.get("path"),
+                            "is_dir": f.get("isdir", False),
+                            "size": additional.get("size"),
+                            "modified": time_info.get("mtime"),
+                            "type": additional.get("type", ""),
+                        })
+                    break
+                await _asyncio.sleep(1.5)
+
+            # Clean up
+            try:
+                await c.call(
+                    "SYNO.FileStation.Search", "stop", version=2, taskid=task_id
+                )
+            except Exception:
+                pass
+
+            return {
+                name: {
+                    "path": path,
+                    "pattern": pattern,
+                    "total": len(files),
+                    "finished": finished,
+                    "files": files,
+                }
+            }
+        except Exception as e:
+            return {name: {"error": str(e)}}
