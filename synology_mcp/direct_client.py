@@ -32,6 +32,21 @@ class DirectApiClient:
             return {name: conn} if conn else {}
         return dict(self._connections)
 
+    async def poll_task(
+        self,
+        nas: str,
+        api: str,
+        task_id: str,
+        poll_method: str = "status",
+        timeout: int = 60,
+        interval: float = 1.5,
+    ) -> dict:
+        """Poll an async task on a specific NAS."""
+        conn = self._connections.get(nas.lower())
+        if not conn:
+            return {"error": f"NAS '{nas}' not connected"}
+        return await conn.poll_task(api, task_id, poll_method, timeout, interval)
+
 
 class _NasConnection:
     """Single NAS connection with auth session and API map."""
@@ -115,6 +130,51 @@ class _NasConnection:
         if cache_key:
             self._cache[cache_key] = (time.monotonic(), data)
         return data
+
+    async def poll_task(
+        self,
+        api: str,
+        task_id: str,
+        poll_method: str = "status",
+        timeout: int = 60,
+        interval: float = 1.5,
+    ) -> dict:
+        """Poll an async FileStation task until completion or timeout.
+
+        Args:
+            api: The SYNO.FileStation.* API that started the task.
+            task_id: The taskid returned by the start method.
+            poll_method: Method name for status check (default: 'status').
+            timeout: Max seconds to wait (default: 60).
+            interval: Seconds between polls (default: 1.5).
+
+        Returns:
+            The final status response data dict. Includes 'timeout': True
+            if the task did not complete within the timeout.
+        """
+        import asyncio as _asyncio
+
+        start = time.monotonic()
+        result = {}
+        while (time.monotonic() - start) < timeout:
+            result = await self.call(api, poll_method, version=2, taskid=task_id)
+            if result.get("finished"):
+                # Clean up the task
+                try:
+                    await self.call(api, "stop", version=2, taskid=task_id)
+                except Exception:
+                    pass  # Best-effort cleanup
+                return result
+            await _asyncio.sleep(interval)
+
+        # Timeout — return partial result with flag
+        result["timeout"] = True
+        result["task_id"] = task_id
+        try:
+            await self.call(api, "stop", version=2, taskid=task_id)
+        except Exception:
+            pass
+        return result
 
     async def _raw_call(
         self,
