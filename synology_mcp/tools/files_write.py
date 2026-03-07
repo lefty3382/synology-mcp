@@ -102,3 +102,135 @@ def register_write_tools(mcp: FastMCP, client: SynologyClient) -> None:
             return {nas_name: {"success": True, "old_path": path, "new_name": new_name}}
         except Exception as e:
             return {nas_name: {"error": str(e)}}
+
+    @mcp.tool
+    async def move(
+        nas: str,
+        source_path: str | list[str],
+        dest_path: str,
+        overwrite: bool = False,
+    ) -> dict:
+        """Move files or folders to a new location on the same NAS.
+
+        For large moves, this runs as an async task and polls for completion.
+
+        Args:
+            nas: NAS name (e.g., 'tank' or 'dozer').
+            source_path: Path or list of paths to move.
+            dest_path: Destination directory path.
+            overwrite: Overwrite existing files at destination (default: False).
+        """
+        if not client.direct:
+            return {"error": "Direct API client not initialized"}
+
+        conn = client.direct.get_connections(nas)
+        if not conn:
+            return {"error": f"NAS '{nas}' not found or not connected"}
+
+        nas_name = nas.lower()
+        c = conn[nas_name]
+
+        # Normalize source to comma-separated string
+        if isinstance(source_path, list):
+            src = ",".join(source_path)
+        else:
+            src = source_path
+
+        try:
+            start_data = await c.call(
+                "SYNO.FileStation.CopyMove",
+                "start",
+                version=3,
+                path=src,
+                dest_folder_path=dest_path,
+                overwrite=str(overwrite).lower(),
+                remove_src="true",
+            )
+            task_id = start_data.get("taskid")
+            if not task_id:
+                return {nas_name: {"error": "Failed to start move task"}}
+
+            result = await c.poll_task(
+                "SYNO.FileStation.CopyMove", task_id, timeout=300
+            )
+
+            return {
+                nas_name: {
+                    "success": not result.get("timeout", False),
+                    "source": source_path,
+                    "destination": dest_path,
+                    "finished": not result.get("timeout", False),
+                }
+            }
+        except Exception as e:
+            return {nas_name: {"error": str(e)}}
+
+    @mcp.tool
+    async def copy(
+        nas: str,
+        source_path: str | list[str],
+        dest_path: str,
+        overwrite: bool = False,
+    ) -> dict:
+        """Copy files or folders to a new location on the same NAS.
+
+        For large copies, this runs as an async task. Times out after 5 minutes
+        for very large operations.
+
+        Args:
+            nas: NAS name (e.g., 'tank' or 'dozer').
+            source_path: Path or list of paths to copy.
+            dest_path: Destination directory path.
+            overwrite: Overwrite existing files at destination (default: False).
+        """
+        if not client.direct:
+            return {"error": "Direct API client not initialized"}
+
+        conn = client.direct.get_connections(nas)
+        if not conn:
+            return {"error": f"NAS '{nas}' not found or not connected"}
+
+        nas_name = nas.lower()
+        c = conn[nas_name]
+
+        if isinstance(source_path, list):
+            src = ",".join(source_path)
+        else:
+            src = source_path
+
+        try:
+            start_data = await c.call(
+                "SYNO.FileStation.CopyMove",
+                "start",
+                version=3,
+                path=src,
+                dest_folder_path=dest_path,
+                overwrite=str(overwrite).lower(),
+                remove_src="false",
+            )
+            task_id = start_data.get("taskid")
+            if not task_id:
+                return {nas_name: {"error": "Failed to start copy task"}}
+
+            result = await c.poll_task(
+                "SYNO.FileStation.CopyMove", task_id, timeout=300
+            )
+
+            timed_out = result.get("timeout", False)
+            resp = {
+                nas_name: {
+                    "success": not timed_out,
+                    "source": source_path,
+                    "destination": dest_path,
+                    "finished": not timed_out,
+                }
+            }
+            if timed_out:
+                resp[nas_name]["task_id"] = result.get("task_id")
+                resp[nas_name]["message"] = (
+                    "Copy still in progress. Large file copy may take longer. "
+                    "Check DSM File Station for status."
+                )
+            return resp
+        except Exception as e:
+            return {nas_name: {"error": str(e)}}
