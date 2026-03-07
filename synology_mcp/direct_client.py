@@ -47,6 +47,15 @@ class DirectApiClient:
             return {"error": f"NAS '{nas}' not connected"}
         return await conn.poll_task(api, task_id, poll_method, timeout, interval)
 
+    async def download(
+        self, nas: str, path: str, max_size: int = 1_048_576
+    ) -> bytes:
+        """Download a file from a specific NAS."""
+        conn = self._connections.get(nas.lower())
+        if not conn:
+            raise RuntimeError(f"NAS '{nas}' not connected")
+        return await conn.download(path, max_size)
+
 
 class _NasConnection:
     """Single NAS connection with auth session and API map."""
@@ -175,6 +184,57 @@ class _NasConnection:
         except Exception:
             pass
         return result
+
+    async def download(
+        self,
+        path: str,
+        max_size: int = 1_048_576,
+    ) -> bytes:
+        """Download a file's raw bytes via SYNO.FileStation.Download.
+
+        Args:
+            path: Absolute file path on the NAS.
+            max_size: Maximum allowed file size in bytes (default 1 MB).
+
+        Returns:
+            Raw file bytes.
+
+        Raises:
+            ValueError: If file exceeds max_size.
+            RuntimeError: If download fails.
+        """
+        api_info = self._api_map.get("SYNO.FileStation.Download", {})
+        cgi_path = api_info.get("path", "entry.cgi")
+
+        url = f"{self._base_url}/webapi/{cgi_path}"
+        params = {
+            "api": "SYNO.FileStation.Download",
+            "version": "2",
+            "method": "download",
+            "path": path,
+            "mode": "download",
+            "_sid": self._sid,
+        }
+        async with self._session.get(url, params=params) as resp:
+            content_type = resp.headers.get("Content-Type", "")
+            # If JSON response, it's an error
+            if "application/json" in content_type:
+                data = await resp.json()
+                raise RuntimeError(f"Download failed: {data}")
+            # Check size before reading full body
+            content_length = resp.headers.get("Content-Length")
+            if content_length and int(content_length) > max_size:
+                raise ValueError(
+                    f"File size {int(content_length)} bytes exceeds "
+                    f"max_size {max_size} bytes"
+                )
+            body = await resp.read()
+            if len(body) > max_size:
+                raise ValueError(
+                    f"File size {len(body)} bytes exceeds "
+                    f"max_size {max_size} bytes"
+                )
+            return body
 
     async def _raw_call(
         self,
