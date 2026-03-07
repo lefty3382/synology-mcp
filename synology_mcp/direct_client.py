@@ -221,6 +221,9 @@ class _NasConnection:
             if "application/json" in content_type:
                 data = await resp.json()
                 raise RuntimeError(f"Download failed: {data}")
+            # If HTML response, it's a DSM error page (e.g., file not found)
+            if "text/html" in content_type:
+                raise RuntimeError(f"Download failed: file not found or access denied (path: {path})")
             # Check size before reading full body
             content_length = resp.headers.get("Content-Length")
             if content_length and int(content_length) > max_size:

@@ -21,7 +21,7 @@ def register_write_tools(mcp: FastMCP, client: SynologyClient) -> None:
 
         Args:
             nas: NAS name (e.g., 'tank' or 'dozer').
-            path: Parent directory path (e.g., '/volume1/Storage/Film/Anime').
+            path: Parent directory path (e.g., '/Storage/Film/Anime').
             name: Name of the new folder to create.
             create_parents: Create intermediate directories if missing (default: True).
         """

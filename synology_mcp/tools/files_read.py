@@ -32,7 +32,7 @@ def register_read_tools(mcp: FastMCP, client: SynologyClient) -> None:
 
         Args:
             nas: NAS name (e.g., 'tank' or 'dozer').
-            path: Absolute directory path (e.g., '/volume1/Storage/Film/Anime/Golden Kamuy').
+            path: Absolute directory path (e.g., '/Storage/Film/Anime/Golden Kamuy').
             sort_by: Sort field — 'name', 'size', 'mtime', or 'type' (default: 'name').
             sort_direction: 'asc' or 'desc' (default: 'asc').
             limit: Max items to return, max 2000 (default: 200).
