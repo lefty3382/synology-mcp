@@ -2,6 +2,14 @@
 
 All notable changes to the Synology MCP Server are documented in this file.
 
+## [2.1.0] - 2026-03-18
+
+### Added
+- `shutdown_nas` — gracefully shut down a NAS unit (write tier, confirm-gated)
+- `reboot_nas` — gracefully reboot a NAS unit (write tier, confirm-gated)
+- Both tools use `SYNO.Core.System` API with a `confirm=True` safety gate
+- Total tool count at write tier: 35 → 37
+
 ## [2.0.0] - 2026-03-06
 
 ### Added

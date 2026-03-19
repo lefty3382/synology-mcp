@@ -1,13 +1,13 @@
 # Synology MCP Server
 
-A [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server for Synology NAS devices. Provides real-time, read-only access to NAS health, storage, and system information via Streamable HTTP transport — **23 tools** across three permission tiers.
+A [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server for Synology NAS devices. Provides real-time access to NAS health, storage, system information, and power management via Streamable HTTP transport — **37 tools** across three permission tiers.
 
 Built with [FastMCP](https://gofastmcp.com/), [py-synologydsm-api](https://github.com/mib1185/py-synologydsm-api), and a custom `DirectApiClient` for raw SYNO.* API access.
 
 ## Features
 
 - **Multi-NAS support** — monitor multiple Synology NAS units from a single server
-- **23 tools** — 10 core health tools + 13 direct API diagnostic tools
+- **37 tools** — 23 health + 7 file browsing + 5 file management + 2 power management
 - **Hybrid backend** — py-synologydsm-api for stable health metrics, direct HTTP client for advanced diagnostics
 - **Three permission tiers** — health (default), read, write — controlled by one env var
 - **Native Streamable HTTP** — no proxy needed, connects directly from Claude Code
@@ -81,9 +81,9 @@ SYNOLOGY_DOZER_PASSWORD=secret
 
 | Tier | Tools | Use Case |
 |------|-------|----------|
-| `health` (default) | 23 tools — core health + direct API diagnostics | Infrastructure monitoring |
-| `read` | Health + file listing, file info, shared folders | Browse NAS contents |
-| `write` | Health + read + upload, delete | Full file management |
+| `health` (default) | 23 tools — 10 core health + 13 direct API diagnostics | Infrastructure monitoring |
+| `read` | 30 tools — health + 7 file browsing tools | + Browse NAS contents |
+| `write` | 37 tools — read + 5 file management + 2 power management | + Full file + power management |
 
 Change the tier by setting `MCP_PERMISSION_TIER` and restarting.
 
@@ -155,16 +155,34 @@ These tools use the `DirectApiClient` to query raw SYNO.* endpoints for data not
 
 | Tool | Description |
 |------|-------------|
-| `list_directory` | List files/folders in a path |
-| `get_file_info` | File/folder metadata |
-| `list_shared_folders` | File Station shared folders |
+| `list_files` | Browse a directory — files/folders with name, size, type, modified date |
+| `get_file_info` | File/folder metadata with ownership and permissions |
+| `list_shared_folders` | Top-level File Station shared folders with volume status |
+| `search_files` | Search for files by name pattern within a directory (async) |
+| `get_file_content` | Read text content of a file (allowlisted extensions only) |
+| `compare_folders` | Compare contents of two directories — only-in-A, only-in-B, mismatched |
+| `get_folder_size` | Recursive size and file count for a directory (async) |
 
 ### Write Tier
 
+#### File Management
+
 | Tool | Description |
 |------|-------------|
-| `upload_file` | Upload a text file |
-| `delete_file` | Delete a file |
+| `create_folder` | Create a new directory (with optional parent creation) |
+| `rename` | Rename a file or folder |
+| `move` | Move files or folders to a new location (async for large ops) |
+| `copy` | Copy files or folders to a new location (async for large ops) |
+| `delete` | Delete files or folders (confirm-gated, optional recursive) |
+
+#### Power Management
+
+| Tool | Description |
+|------|-------------|
+| `shutdown_nas` | Gracefully shut down a NAS (confirm-gated) |
+| `reboot_nas` | Gracefully reboot a NAS (confirm-gated) |
+
+Both power tools require `confirm=True` to execute. Without it, they return a preview of the action. The `nas` parameter is required — you cannot shut down or reboot all NAS units at once.
 
 ## NAS Authentication
 

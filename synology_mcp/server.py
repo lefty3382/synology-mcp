@@ -8,6 +8,7 @@ from .tools.health import register_health_tools
 from .tools.diagnostic import register_diagnostic_tools
 from .tools.files_read import register_read_tools
 from .tools.files_write import register_write_tools
+from .tools.power import register_power_tools
 
 
 def create_server(config: AppConfig, client: SynologyClient) -> FastMCP:
@@ -17,7 +18,7 @@ def create_server(config: AppConfig, client: SynologyClient) -> FastMCP:
     if tier == "write":
         desc = (
             "Provides full access to Synology NAS: health monitoring, "
-            "storage diagnostics, file browsing, and file management. "
+            "storage diagnostics, file browsing, file management, and power management. "
             "Query one or all configured NAS units."
         )
     elif tier == "read":
@@ -42,8 +43,9 @@ def create_server(config: AppConfig, client: SynologyClient) -> FastMCP:
     if tier in ("read", "write"):
         register_read_tools(mcp, client)
 
-    # Write tier — file mutations
+    # Write tier — file mutations + power management
     if tier == "write":
         register_write_tools(mcp, client)
+        register_power_tools(mcp, client)
 
     return mcp
