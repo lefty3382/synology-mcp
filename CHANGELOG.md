@@ -2,6 +2,33 @@
 
 All notable changes to the Synology MCP Server are documented in this file.
 
+## [3.0.1] - 2026-06-16
+
+### Fixed
+- **Expired DSM sessions now self-heal.** DSM invalidates idle session IDs and
+  returns error code 106 ("session timeout"), but both py-synologydsm-api's own
+  `_request` retry and `DirectApiClient.call` only retried on code 119 — so once
+  an idle session expired, every health/storage call failed (`Session timeout`
+  then `Not logged in. You have to do login() first.`) until the container was
+  manually restarted. Both layers now re-login and retry once on codes 106/107/119.
+- New `session_retry` module centralises session-error detection and the
+  re-login/retry helper; `client.py` routes the py-synologydsm-api data path
+  through a `SessionRetryingSynologyDSM` subclass (covers all health tools with
+  no per-tool changes).
+
+### Changed
+- Pinned `py-synologydsm-api==2.7.3` (the subclass overrides the library's
+  private `_request`; the pin keeps that override stable across rebuilds).
+
+### Added
+- `tests/test_session_retry.py` and a CI test job (gates the image build).
+
+### Note
+- This is the first published image to include the v2.1.0 power tools
+  (`shutdown_nas` / `reboot_nas`): the v3.0.0 tag was mistakenly applied to an
+  earlier commit, so the v2.1.0 work was committed to `main` but never built.
+  v3.0.1 catches the release line up to `main`.
+
 ## [2.1.0] - 2026-03-18
 
 ### Added

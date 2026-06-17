@@ -1,3 +1,6 @@
 fastmcp>=2.0.0,<4.0.0
-py-synologydsm-api>=2.0.0
+# Pinned: client.py subclasses SynologyDSM and overrides the private _request()
+# to add session-expiry (106/107) re-login+retry. Bump deliberately and
+# re-verify that override + tests/test_session_retry.py still hold.
+py-synologydsm-api==2.7.3
 aiohttp>=3.9.0

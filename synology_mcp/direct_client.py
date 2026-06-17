@@ -6,6 +6,7 @@ from typing import Any
 import aiohttp
 
 from .config import NasConfig
+from .session_retry import SESSION_RETRY_CODES
 
 
 class DirectApiClient:
@@ -125,8 +126,14 @@ class _NasConnection:
 
         result = await self._raw_call(api, method, version, **params)
 
-        # Retry once on session expiry (error 119)
-        if not result.get("success") and result.get("error", {}).get("code") == 119:
+        # Retry once on any session-expiry error: 106 (session timeout, the
+        # idle-expiry case), 107 (interrupted by duplicate login), or 119
+        # (session ID not valid). Retrying only on 119 left calls failing
+        # until the process was restarted.
+        if (
+            not result.get("success")
+            and result.get("error", {}).get("code") in SESSION_RETRY_CODES
+        ):
             await self.login()
             result = await self._raw_call(api, method, version, **params)
 
